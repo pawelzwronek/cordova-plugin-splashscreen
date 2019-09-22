@@ -19,6 +19,8 @@
 
 package org.apache.cordova.splashscreen;
 
+import java.util.Locale;
+
 import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.content.Context;
@@ -40,6 +42,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
+import android.util.Log;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaPlugin;
@@ -80,7 +83,9 @@ public class SplashScreen extends CordovaPlugin {
 
     private int getSplashId() {
         int drawableId = 0;
-        String splashResource = preferences.getString("SplashScreen", "screen");
+        String locale = getLocaleName() != null ? getLocaleName().substring(0, 2) : "";
+        Log.d(LOG_TAG, "getLocaleName: " + locale);
+        String splashResource = preferences.getString("SplashScreen_" + locale, "screen");
         if (splashResource != null) {
             drawableId = cordova.getActivity().getResources().getIdentifier(splashResource, "drawable", cordova.getActivity().getClass().getPackage().getName());
             if (drawableId == 0) {
@@ -409,5 +414,75 @@ public class SplashScreen extends CordovaPlugin {
                 }
             }
         });
+    }
+
+    /*
+     * @Description: Returns the BCP 47 Unicode locale identifier for current locale setting
+     * The locale is defined by a language code, a country code, and a variant, separated
+     * by a hyphen, for example, "en-US", "fr-CA", etc.,
+     *
+     * @Return: JSONObject
+     *          Object.value {String}: The locale identifier
+     *
+     * @throws: Error
+     */
+    private String getLocaleName() throws Error{
+        try{
+            return toBcp47Language(Locale.getDefault());
+        }catch(Exception e){
+            throw new Error("getLocaleName()");
+        }
+    }
+
+    /*
+     * @Description: Returns a well-formed ITEF BCP 47 language tag representing
+     * the locale identifier for the client's current locale 
+     *
+     * @Return: String: The BCP 47 language tag for the current locale
+     */
+    private String toBcp47Language(Locale loc){
+        final char SEP = '-';       // we will use a dash as per BCP 47
+        String language = loc.getLanguage();
+        String region = loc.getCountry();
+        String variant = loc.getVariant();
+
+        // special case for Norwegian Nynorsk since "NY" cannot be a variant as per BCP 47
+        // this goes before the string matching since "NY" wont pass the variant checks
+        if( language.equals("no") && region.equals("NO") && variant.equals("NY")){
+            language = "nn";
+            region = "NO";
+            variant = "";
+        }
+
+        if( language.isEmpty() || !language.matches("\\p{Alpha}{2,8}")){
+            language = "und";       // Follow the Locale#toLanguageTag() implementation 
+                                    // which says to return "und" for Undetermined
+        }else if(language.equals("iw")){
+            language = "he";        // correct deprecated "Hebrew"
+        }else if(language.equals("in")){
+            language = "id";        // correct deprecated "Indonesian"
+        }else if(language.equals("ji")){
+            language = "yi";        // correct deprecated "Yiddish"
+        }
+
+        // ensure valid country code, if not well formed, it's omitted
+        if (!region.matches("\\p{Alpha}{2}|\\p{Digit}{3}")) {
+            region = "";
+        }
+
+         // variant subtags that begin with a letter must be at least 5 characters long
+        if (!variant.matches("\\p{Alnum}{5,8}|\\p{Digit}\\p{Alnum}{3}")) {
+            variant = "";
+        }
+
+        StringBuilder bcp47Tag = new StringBuilder(language);
+        if (!region.isEmpty()) {
+            bcp47Tag.append(SEP).append(region);
+        }
+        if (!variant.isEmpty()) {
+             bcp47Tag.append(SEP).append(variant);
+        }
+
+        return bcp47Tag.toString();
     }
 }
